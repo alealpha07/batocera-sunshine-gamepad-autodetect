@@ -1,0 +1,54 @@
+#!/bin/bash
+
+SERVICE_NAME="sunshine_gamepad_autodetect"
+INSTALL_DIR="/userdata/system/sunshine-gamepad-autodetect"
+RUN_DIR="/var/run/sunshine-gamepad-autodetect"
+LAUNCHER="/usr/bin/emulatorlauncher"
+LOG_FILE="/userdata/system/logs/sunshine-gamepad-autodetect.log"
+
+log() { echo "$(date '+%F %T') | $*" >>"$LOG_FILE"; }
+
+is_active() { grep -q " ${LAUNCHER} " /proc/mounts; }
+
+start_service() {
+    if is_active; then
+        return 0
+    fi
+    mkdir -p "$RUN_DIR" || return 1
+    cp "$LAUNCHER" "$RUN_DIR/emulatorlauncher" || return 1
+    cp "$INSTALL_DIR/emulatorlauncher-wrapper" "$RUN_DIR/wrapper" || return 1
+    chmod 755 "$RUN_DIR/emulatorlauncher" "$RUN_DIR/wrapper"
+    if mount --bind "$RUN_DIR/wrapper" "$LAUNCHER"; then
+        log "started"
+    else
+        log "start failed: could not bind $LAUNCHER"
+        return 1
+    fi
+}
+
+stop_service() {
+    if ! is_active; then
+        return 0
+    fi
+    umount "$LAUNCHER" || umount -l "$LAUNCHER"
+    log "stopped"
+}
+
+status_service() {
+    if is_active; then
+        echo "${SERVICE_NAME}: running"
+    else
+        echo "${SERVICE_NAME}: stopped"
+    fi
+}
+
+case "${1-}" in
+    start) start_service ;;
+    stop) stop_service ;;
+    restart) stop_service; start_service ;;
+    status) status_service ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
