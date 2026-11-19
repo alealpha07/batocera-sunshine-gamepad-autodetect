@@ -3,23 +3,43 @@
 SERVICE_NAME="sunshine_gamepad_autodetect"
 INSTALL_DIR="/userdata/system/sunshine-gamepad-autodetect"
 RUN_DIR="/var/run/sunshine-gamepad-autodetect"
-LAUNCHER="/usr/bin/emulatorlauncher"
+# v44+ launches games with batocera-launch, v43 and older with emulatorlauncher
+if [ -x /usr/bin/batocera-launch ]; then LAUNCHER="/usr/bin/batocera-launch"; else LAUNCHER="/usr/bin/emulatorlauncher"; fi
 LOG_FILE="/userdata/system/logs/sunshine-gamepad-autodetect.log"
 
 log() { echo "$(date '+%F %T') | $*" >>"$LOG_FILE"; }
 
+# The Switch add-on launches games with its own run.py, which bypasses the launcher above.
+# Route its ES command through the wrapper too. Re-applied at every start because add-on
+# updates overwrite es_systems_switch.cfg (the first boot after an add-on update may miss it).
+SWITCH_CFG="/userdata/system/configs/emulationstation/es_systems_switch.cfg"
+SWITCH_RUN="/userdata/system/switch/launch/run.py"
+WRAPPER="$INSTALL_DIR/emulatorlauncher-wrapper"
+
+wrap_switch() {
+    [ -f "$SWITCH_CFG" ] && [ -f "$SWITCH_RUN" ] || return 0
+    grep -qF "$WRAPPER --exec $SWITCH_RUN" "$SWITCH_CFG" && return 0
+    sed -i "s|<command>python $SWITCH_RUN |<command>python $WRAPPER --exec $SWITCH_RUN |" "$SWITCH_CFG"
+    if grep -qF "$WRAPPER --exec $SWITCH_RUN" "$SWITCH_CFG"; then
+        log "switch launch command wrapped (takes effect after ES restart)"
+    else
+        log "switch launch command not recognised, left unchanged"
+    fi
+}
+
 is_active() { grep -q " ${LAUNCHER} " /proc/mounts; }
 
 start_service() {
+    wrap_switch
     if is_active; then
         return 0
     fi
     mkdir -p "$RUN_DIR" || return 1
-    cp "$LAUNCHER" "$RUN_DIR/emulatorlauncher" || return 1
+    cp "$LAUNCHER" "$RUN_DIR/original-launcher" || return 1
     cp "$INSTALL_DIR/emulatorlauncher-wrapper" "$RUN_DIR/wrapper" || return 1
-    chmod 755 "$RUN_DIR/emulatorlauncher" "$RUN_DIR/wrapper"
+    chmod 755 "$RUN_DIR/original-launcher" "$RUN_DIR/wrapper"
     if mount --bind "$RUN_DIR/wrapper" "$LAUNCHER"; then
-        log "started"
+        log "started on $LAUNCHER"
     else
         log "start failed: could not bind $LAUNCHER"
         return 1

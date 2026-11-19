@@ -20,16 +20,24 @@ EmulationStation assigns players in `InputManager::computePlayersConfigs()` by m
 
 ## How it works
 
-EmulationStation starts every game through `/usr/bin/emulatorlauncher`, passing the chosen controllers as `-p1index -p1guid -p1name …` arguments. When the service starts, it bind-mounts a small wrapper over that file. The wrapper moves the players whose name contains `sunshine` to the front, renumbers them, and then runs the original launcher.
+EmulationStation starts every game through a launcher, passing the chosen controllers as `-p1index -p1guid -p1name …` arguments. The launcher is `/usr/bin/batocera-launch` on Batocera 44 and later, and `/usr/bin/emulatorlauncher` on Batocera 43 and earlier; the service picks whichever exists. When the service starts, it bind-mounts a small wrapper over that file. The wrapper moves the players whose name contains `sunshine` to the front, renumbers them, and then runs the original launcher.
 
 - Only the controllers EmulationStation passes in are reordered, so pads that are not connected are never assigned.
 - If no Sunshine pad is connected, the arguments are passed through untouched.
 - If anything goes wrong while reordering, the game starts with the original arguments.
 - Nothing runs in the background. Stopping the service removes the bind mount, and the system files are never modified on disk.
 
+### Switch add-on
+
+The [foclabroc Switch add-on](https://github.com/foclabroc/New-batocera-switch) starts games with its own `/userdata/system/switch/launch/run.py`, which bypasses the launcher above. When the add-on is installed, the service also changes its EmulationStation command in `/userdata/system/configs/emulationstation/es_systems_switch.cfg` so that it goes through the wrapper (`emulatorlauncher-wrapper --exec run.py …`).
+
+- The change is re-applied every time the service starts, because add-on updates overwrite that file. The first boot after an add-on update can miss it; restart EmulationStation once to pick it up.
+- EmulationStation reads the command only when it starts, so restart it after installing the service.
+- `uninstall.sh` restores the original command. If you delete the files by hand instead, restore it yourself, or Switch games will not start.
+
 ## Requirements
 
-- Batocera with user services support (`batocera-services`). Tested on Batocera 43.
+- Batocera with user services support (`batocera-services`). Tested on Batocera 43 and 44.
 - Sunshine installed and streaming gamepads to the machine.
 
 ## Install
@@ -57,7 +65,7 @@ From EmulationStation: **Main menu → System settings → Services → `sunshin
 bash uninstall.sh
 ```
 
-This stops and disables the service and removes its files and log.
+This stops and disables the service, restores the Switch add-on launch command, and removes its files and log.
 
 ## Limitations
 

@@ -4,7 +4,7 @@ import re
 import sys
 import time
 
-ORIGINAL_LAUNCHER = "/var/run/sunshine-gamepad-autodetect/emulatorlauncher"
+ORIGINAL_LAUNCHER = "/var/run/sunshine-gamepad-autodetect/original-launcher"
 LOG_FILE = "/userdata/system/logs/sunshine-gamepad-autodetect.log"
 LOG_MAX_BYTES = 256 * 1024
 REMOTE_PAD_MARKER = "sunshine"
@@ -70,15 +70,22 @@ def reorder_args(args):
 
 def main():
     args = sys.argv[1:]
+    target = ORIGINAL_LAUNCHER
+    # "--exec <script>": launch another launcher script (e.g. the Switch add-on run.py)
+    if len(args) >= 2 and args[0] == "--exec":
+        target, args = args[1], args[2:]
     try:
         args = reorder_args(args)
     except Exception as error:
         log(f"reorder failed, launching unchanged: {error!r}")
 
-    if os.path.exists(ORIGINAL_LAUNCHER):
-        os.execv(sys.executable, [sys.executable, ORIGINAL_LAUNCHER] + args)
+    if os.path.exists(target):
+        os.execv(sys.executable, [sys.executable, target] + args)
 
-    from configgen.emulatorlauncher import launch
+    try:
+        from batocera_launch.cli.main import main as launch  # v44+
+    except ImportError:
+        from configgen.emulatorlauncher import launch  # v43 and older
     sys.argv = [sys.argv[0]] + args
     sys.exit(launch())
 
